@@ -5,7 +5,7 @@ a logical ring of peers, coordinated by a central manager.
 
 ## Team
 
-- Rogelio Corrales
+- Rogelio Corrales (ASU ID: 1229167630)
 - Cooper _____
 
 ## Ports
