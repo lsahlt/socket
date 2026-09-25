@@ -103,13 +103,18 @@ def send(sock, addr, parts, who="?", label=None):
 
 
 def request(sock, addr, parts, who="?", label=None,
-            timeout=DEFAULT_TIMEOUT, retries=DEFAULT_RETRIES):
+            timeout=DEFAULT_TIMEOUT, retries=DEFAULT_RETRIES, quiet=False):
     """
     Send a request and block until a reply arrives.
 
     UDP gives no delivery guarantee, so the datagram is retransmitted up to
     `retries` times. Every request in this protocol is idempotent at the
     application level, so a duplicate caused by a retry is harmless.
+
+    Set quiet=True to suppress the per-message trace. Distributing a dataset
+    produces hundreds of store messages, and printing all of them would bury
+    the interesting lines; the caller logs a summary instead. Retries are
+    always traced, quiet or not, because a retry means something went wrong.
 
     Returns the decoded reply as a list of fields. Raises Timeout on failure.
     """
@@ -120,14 +125,16 @@ def request(sock, addr, parts, who="?", label=None,
         for attempt in range(1, retries + 1):
             if attempt > 1:
                 trace_info(who, "retry {}/{} -> {}".format(attempt, retries, name))
-            trace_sent(who, name, parts)
+            if not quiet:
+                trace_sent(who, name, parts)
             sock.sendto(encode(parts), addr)
             try:
                 data, src = sock.recvfrom(BUFSIZE)
             except socket.timeout:
                 continue
             reply = decode(data)
-            trace_recv(who, name, reply)
+            if not quiet:
+                trace_recv(who, name, reply)
             return reply
         raise Timeout("no reply from {} after {} attempts".format(name, retries))
     finally:
