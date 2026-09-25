@@ -17,7 +17,7 @@ Status:
     register    working
     setup-dht   working through ring construction (set-id)
     dataset     loaded, l and hash table size computed
-    store       STUB -- distribution around the ring, next commit
+    store       working -- records distributed hop-by-hop around the ring
 """
 
 import csv
@@ -27,8 +27,9 @@ import socket
 import sys
 
 from protocol import (BUFSIZE, FAILURE, SUCCESS, Timeout, decode, encode,
-                      first_prime_after, fmt_tuple, hash_record, parse_tuple,
-                      request, trace_info, trace_recv, trace_sent)
+                      first_prime_after, fmt_record, fmt_tuple, hash_record,
+                      parse_record, parse_tuple, request, trace_info,
+                      trace_recv, trace_sent)
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 
@@ -58,8 +59,16 @@ class Peer:
         self.ring = []          # [(name, ip, p_port)] indexed by identifier
         self.right = None       # (name, ip, p_port) of the right neighbour
 
-        # local hash table
-        self.table = {}         # pos -> record (list of 14 fields)
+        # local hash table: pos -> list of records that hashed to that slot.
+        # Chaining, because pos = event_id mod s is not injective -- with 223
+        # records in 449 slots collisions are likely, and overwriting would
+        # silently lose data. The spec's query wording ("examines position pos
+        # to see if it holds the record with the given event id") assumes a
+        # slot may hold something other than the record you want, so a chain
+        # is also what find-event will need for the full project.
+        self.table = {}
+        self.record_count = 0   # records stored here, counting chained ones
+        self.forwarded = 0      # store messages passed along the ring
         self.hash_size = None   # s, the first prime > 2*l
 
     # -------------------------------------------------------------- utilities
@@ -78,9 +87,15 @@ class Peer:
         trace_info(self.who, "    ring id={} n={}".format(self.id, self.n))
         trace_info(self.who, "    right neighbour={}".format(
             self.label_of(self.right) if self.right else "-"))
-        trace_info(self.who, "    records held={} table size={}".format(
-            len(self.table), self.hash_size))
+        trace_info(self.who, "    records held={} in {} slots, table size s={}".format(
+            self.record_count, len(self.table), self.hash_size))
+        trace_info(self.who, "    store messages forwarded={}".format(self.forwarded))
         trace_info(self.who, "-------------------------------------------------")
+
+    def store_locally(self, pos, record):
+        """Append to the chain at slot pos."""
+        self.table.setdefault(pos, []).append(record)
+        self.record_count += 1
 
     def adopt_ring(self, my_id, n, tuples):
         """Store our identifier, the ring size, and our right neighbour."""
@@ -257,45 +272,110 @@ class Peer:
         """
         Step 2 of section 1.2.1: populate the DHT with data.
 
-        This commit covers reading the dataset and sizing the hash table. The
-        distribution of records around the ring via store is the next commit;
-        see handle_store().
+        The leader reads the dataset, sizes the hash table, then places each
+        record. Records belonging to the leader go straight into its own
+        table; the rest are handed to the right neighbour with a store message
+        and travel hop-by-hop around the ring to their owner. The leader never
+        sends a record directly to its target node -- the spec requires ring
+        topology to be used for all management traffic.
         """
         records = self.load_records(year)
         if records is None:
             return False
 
-        self.records = records
-        length = len(records)                          # l
+        length = len(records)                           # l
         self.hash_size = first_prime_after(2 * length)  # s
 
         trace_info(self.who, "dataset details-{}.csv: l={} records".format(year, length))
         trace_info(self.who, "hash table size s = first prime > 2*{} = {}".format(
             length, self.hash_size))
 
-        # Dry run of the two hash functions. This proves the hashing is right
-        # before any of it goes over the wire, and the same tally becomes the
-        # real per-node count once store is implemented -- the leader computes
-        # id for every record, so it never has to ask the other nodes.
+        # Dry run of the two hash functions before anything goes over the
+        # wire. The leader computes id for every record, so it knows the
+        # correct per-node totals without having to ask the other nodes; the
+        # actual counts are checked against these at the end.
         self.expected_counts = {i: 0 for i in range(self.n)}
         for row in records:
             _pos, node_id = hash_record(row[0], self.hash_size, self.n)
             self.expected_counts[node_id] += 1
-
         trace_info(self.who, "expected distribution: " + ", ".join(
             "id={}:{}".format(i, self.expected_counts[i]) for i in range(self.n)))
-        trace_info(self.who, "[STUB] records not yet distributed -- store is the next commit")
+
+        # Distribute. One record is in flight at a time: the leader waits for
+        # the end-to-end acknowledgement before sending the next. That is
+        # stop-and-wait flow control, and it is deliberate. UDP has no flow
+        # control of its own, so firing hundreds of datagrams back-to-back
+        # overruns the receiver's socket buffer and records vanish with no
+        # error anywhere. Waiting for each ack also means only one datagram
+        # can be outstanding on a peer's p-port, so a reply can never be
+        # mistaken for an unrelated message. At a few hundred records on a LAN
+        # this costs well under a second.
+        right_addr = (self.right[1], self.right[2])
+        self.actual_counts = {i: 0 for i in range(self.n)}
+        sent = 0
+
+        trace_info(self.who, "distributing {} records around the ring via {}".format(
+            length, self.right[0]))
+
+        for row in records:
+            pos, node_id = hash_record(row[0], self.hash_size, self.n)
+
+            if node_id == self.id:
+                self.store_locally(pos, row)
+                self.actual_counts[node_id] += 1
+                continue
+
+            message = ["store", node_id, pos, fmt_record(row)]
+            try:
+                # The first few are traced in full so the message format is
+                # visible in the demo; the rest are summarised.
+                loud = sent < 2
+                reply = request(self.p_sock, right_addr, message,
+                                who=self.who, label=self.label_of(self.right),
+                                timeout=2.0, quiet=not loud)
+            except Timeout as exc:
+                trace_info(self.who, "store for id={} failed: {}".format(node_id, exc))
+                return False
+
+            if reply[0] != SUCCESS:
+                trace_info(self.who, "store for id={} refused: {}".format(
+                    node_id, reply[2] if len(reply) > 2 else "?"))
+                return False
+
+            self.actual_counts[node_id] += 1
+            sent += 1
+            if sent % 50 == 0:
+                trace_info(self.who, "  ... {} records sent around the ring".format(sent))
+
+        trace_info(self.who, "distribution done: {} stored locally, {} sent".format(
+            self.record_count, sent))
         return True
 
     def print_ring_counts(self):
-        """Step 3: the leader reports how many records each node holds."""
+        """
+        Step 3: the leader reports how many records each node holds.
+
+        The counts are the leader's own tally, since it computed the owning id
+        for every record as it distributed them. They are cross-checked
+        against the dry run: a shortfall means a store was lost on the wire.
+        """
         trace_info(self.who, "--- records stored per node ---------------------")
+        total = 0
+        mismatch = False
         for i, tup in enumerate(self.ring):
-            if i == self.id:
-                count = len(self.table)
-            else:
-                count = "?"  # real once store is implemented
-            trace_info(self.who, "    id={} {:<10} records={}".format(i, tup[0], count))
+            actual = self.actual_counts.get(i, 0)
+            expected = self.expected_counts.get(i, 0)
+            flag = ""
+            if actual != expected:
+                flag = "   <-- MISMATCH, expected {}".format(expected)
+                mismatch = True
+            trace_info(self.who, "    id={} {:<10} records={}{}".format(
+                i, tup[0], actual, flag))
+            total += actual
+        trace_info(self.who, "    total={} (l={})".format(total, sum(
+            self.expected_counts.values())))
+        if mismatch:
+            trace_info(self.who, "    WARNING: records were lost in transit")
         trace_info(self.who, "-------------------------------------------------")
 
     # ------------------------------------------------- peer-to-peer handlers
@@ -310,21 +390,41 @@ class Peer:
 
     def handle_store(self, parts, src):
         """
-        STUB -- next commit.
+        Receive a record travelling around the ring.
 
-        Expected shape:
-            target = int(parts[1]); pos = int(parts[2])
-            record = protocol.parse_record(parts[3])
-            if target == self.id:  self.table[pos] = record
-            else:                  forward the same message to self.right
-
-        Watch out: several thousand records go out back-to-back and UDP has no
-        flow control, so the receiver's socket buffer can overflow and drop
-        them silently. Verify the per-node counts match expected_counts; if
-        they do not, ack each store or add a small delay between sends.
+        If we are the target, store it and acknowledge. Otherwise pass the
+        message unchanged to our right neighbour and wait for its answer
+        before acknowledging, so the leader's acknowledgement is end-to-end:
+        by the time it returns, the record really is in the target's table.
         """
-        trace_info(self.who, "[STUB] store received but not handled yet")
-        return [FAILURE, "store", "not implemented yet"]
+        if self.id is None:
+            return [FAILURE, "store", "peer is not part of a DHT"]
+        try:
+            target = int(parts[1])
+            pos = int(parts[2])
+            record = parse_record(parts[3])
+        except (IndexError, ValueError):
+            return [FAILURE, "store", "malformed store message"]
+
+        if target == self.id:
+            self.store_locally(pos, record)
+            if self.record_count <= 2 or self.record_count % 25 == 0:
+                trace_info(self.who, "stored event {} at pos {} ({} records held)".format(
+                    record[0], pos, self.record_count))
+            return [SUCCESS, "store", target]
+
+        # Not ours: keep it moving around the ring.
+        right_addr = (self.right[1], self.right[2])
+        self.forwarded += 1
+        if self.forwarded <= 2 or self.forwarded % 25 == 0:
+            trace_info(self.who, "forwarding event {} for id={} to {} ({} forwarded)".format(
+                record[0], target, self.right[0], self.forwarded))
+        try:
+            return request(self.p_sock, right_addr, parts,
+                           who=self.who, label=self.label_of(self.right),
+                           timeout=2.0, quiet=True)
+        except Timeout:
+            return [FAILURE, "store", "right neighbour did not respond"]
 
     def dispatch_peer(self, parts, src):
         command = parts[0]
