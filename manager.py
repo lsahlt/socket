@@ -203,8 +203,8 @@ def main():
     except ValueError:
         print("port must be an integer", file=sys.stderr)
         sys.exit(1)
-    if not 38500 <= port <= 38999:
-        print("warning: port {} is outside group 77's range 38500-38999".format(port),
+    if not 39500 <= port <= 39999:
+        print("warning: port {} is outside group 77's range 39500-39999".format(port),
               file=sys.stderr)
 
     try:

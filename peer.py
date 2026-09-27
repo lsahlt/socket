@@ -122,8 +122,8 @@ class Peer:
             print("ports must be integers")
             return
         for port in (m_port, p_port):
-            if not 38500 <= port <= 38999:
-                print("warning: port {} is outside group 77's range 38500-38999".format(port))
+            if not 39500 <= port <= 39999:
+                print("warning: port {} is outside group 77's range 39500-39999".format(port))
 
         # Bind both sockets before contacting the manager, so that the ports we
         # advertise are ports we actually hold.
