@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 """
-DHT manager — CSE 434 Socket Project, Group 77.
+DHT manager: CSE 434 Socket Project, Group 77.
 
-An always-on process that tracks registered peers and coordinates construction
+Process that tracks registered peers and coordinates construction
 of the DHT. Listens on one UDP port given on the command line.
 
-Milestone scope: register, setup-dht, dht-complete.
-
-    python3 manager.py <port>
+python3 manager.py <port>
 """
 
 import random
@@ -19,15 +17,15 @@ from protocol import (BUFSIZE, FAILURE, SUCCESS, decode, encode, fmt_tuple,
 
 WHO = "manager"
 
-# Peer states from the spec
+#peer states from the spec
 FREE = "Free"
 LEADER = "Leader"
 IN_DHT = "InDHT"
 
-# Manager's view of the DHT itself
-DHT_NONE = "none"          # no DHT exists
-DHT_BUILDING = "building"  # setup-dht answered, waiting for dht-complete
-DHT_READY = "complete"     # DHT is built
+#manager view of the dht
+DHT_NONE = "none"          
+DHT_BUILDING = "building"  
+DHT_READY = "complete"    
 
 
 class Manager:
@@ -36,14 +34,14 @@ class Manager:
         self.sock.bind(("", port))
         self.port = port
 
-        # name -> {"ip", "m_port", "p_port", "state"}
+        #name-> {"ip", "m_port", "p_port", "state"}
         self.peers = {}
 
         self.dht_status = DHT_NONE
         self.dht_leader = None
-        self.dht_members = []  # peer names, index == ring identifier
+        self.dht_members = []  #peer names, index == ring identifier
 
-    # ------------------------------------------------------------- utilities
+    #utilities
 
     def free_peers(self, exclude=None):
         return [n for n, p in self.peers.items()
@@ -70,7 +68,7 @@ class Manager:
             self.dht_status, self.dht_leader, self.dht_members or "-"))
         trace_info(WHO, "-------------------------------------------------")
 
-    # -------------------------------------------------------------- handlers
+    #handlers
 
     def handle_register(self, args):
         if len(args) != 4:
@@ -150,13 +148,13 @@ class Manager:
         self.dump_state()
         return [SUCCESS, "dht-complete"]
 
-    # ------------------------------------------------------------- main loop
+    #mainloop
 
     def dispatch(self, parts):
         command, args = parts[0], parts[1:]
 
-        # While a DHT is under construction the manager answers FAILURE to
-        # everything except the dht-complete it is waiting for.
+        #wile a DHT is under construction the manager answers FAILURE to
+        # everything except the dht it is waiting for
         if self.dht_status == DHT_BUILDING and command != "dht-complete":
             return [FAILURE, command, "DHT is under construction"]
 
@@ -167,7 +165,7 @@ class Manager:
         if command == "dht-complete":
             return self.handle_dht_complete(args)
 
-        # Commands deferred to the full project (due 10/18).
+        #commands until full project on 10/18
         if command in ("query-dht", "leave-dht", "join-dht", "dht-rebuilt",
                        "deregister", "teardown-dht", "teardown-complete"):
             return [FAILURE, command, "not implemented until the full project"]
@@ -188,7 +186,7 @@ class Manager:
             trace_recv(WHO, label, parts)
             try:
                 reply = self.dispatch(parts)
-            except Exception as exc:  # never let one bad message kill the manager
+            except Exception as exc:  #in case of a bad message, keep manager
                 reply = [FAILURE, parts[0] if parts else "?", "internal error: " + str(exc)]
             trace_sent(WHO, label, reply)
             self.sock.sendto(encode(reply), src)
