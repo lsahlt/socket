@@ -9,21 +9,21 @@ this module so the two programs cannot drift apart.
 
 import socket
 
-# ---------------------------------------------------------------- constants
+#constants
 
-DELIM = "|"        # separates fields of a message
-TUPLE_DELIM = ","  # separates name,ip,p-port inside one 3-tuple
-REC_DELIM = "\x1f"  # separates the 14 fields of a storm record
+DELIM = "|"        #separates fields of a message
+TUPLE_DELIM = ","  #separates name,ip,p-port inside one tuple
+REC_DELIM = "\x1f"  #separates the 14 fields of a storm record
 ENCODING = "utf-8"
-BUFSIZE = 65535    # max UDP payload; storm records are far smaller
+BUFSIZE = 65535    #max UDP payload
 
 SUCCESS = "SUCCESS"
 FAILURE = "FAILURE"
 
-DEFAULT_TIMEOUT = 5.0  # seconds to wait for a reply
-DEFAULT_RETRIES = 3    # attempts before giving up on a request
+DEFAULT_TIMEOUT = 5.0  #seconds to wait for a reply
+DEFAULT_RETRIES = 3    #attempts before giving up on a request
 
-# ------------------------------------------------------------ encode/decode
+#encode/decode
 
 
 def encode(parts):
@@ -57,21 +57,20 @@ def parse_record(text):
     return text.split(REC_DELIM)
 
 
-# ------------------------------------------------------------------- tracing
+#racing
 
-TRACE_MAXLEN = 110  # keep lines short enough to read in the demo video
+TRACE_MAXLEN = 110  #keep lines short enough to read in the demo 
 
 
 def trace(who, arrow, other, parts):
     """
     Print a labelled trace line for every datagram.
 
-    The project spec grades on the output being "a well-labelled trace of the
-    messages transmitted and received", so every send and receive in this
+    every send and receive in this
     codebase goes through here.
     """
     body = DELIM.join(str(p) for p in parts)
-    body = body.replace(REC_DELIM, "~")  # unit separators are invisible
+    body = body.replace(REC_DELIM, "~")  # nit separators are invisible
     if len(body) > TRACE_MAXLEN:
         body = body[:TRACE_MAXLEN] + " ...(truncated)"
     print("[{:<8}] {} {:<22} {}".format(who, arrow, other, body), flush=True)
@@ -89,7 +88,7 @@ def trace_info(who, text):
     print("[{:<8}] {} {}".format(who, "   ..   ", text), flush=True)
 
 
-# ------------------------------------------------------------------ requests
+#requests
 
 
 class Timeout(Exception):
@@ -107,14 +106,9 @@ def request(sock, addr, parts, who="?", label=None,
     """
     Send a request and block until a reply arrives.
 
-    UDP gives no delivery guarantee, so the datagram is retransmitted up to
-    `retries` times. Every request in this protocol is idempotent at the
-    application level, so a duplicate caused by a retry is harmless.
 
-    Set quiet=True to suppress the per-message trace. Distributing a dataset
-    produces hundreds of store messages, and printing all of them would bury
-    the interesting lines; the caller logs a summary instead. Retries are
-    always traced, quiet or not, because a retry means something went wrong.
+    Set quiet=True to suppress the per message trace. The caller logs a summary instead. Retries are
+    always traced,because retry means something went wrong.
 
     Returns the decoded reply as a list of fields. Raises Timeout on failure.
     """
@@ -141,7 +135,7 @@ def request(sock, addr, parts, who="?", label=None,
         sock.settimeout(old)
 
 
-# ------------------------------------------------------------------- hashing
+#hashing
 
 
 def first_prime_after(x):
@@ -171,13 +165,13 @@ def first_prime_after(x):
 
 def hash_record(event_id, table_size, ring_size):
     """
-    The two hash functions from the project spec.
+    The two hash functions from the  spec
 
         pos = event_id mod s
         id  = pos mod n
 
     Returns (pos, id): the slot in the local hash table, and the ring
-    identifier of the node that owns that slot.
+    identifier of the node that owns the slot.
     """
     pos = int(event_id) % table_size
     node_id = pos % ring_size
