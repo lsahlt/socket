@@ -1,7 +1,7 @@
 # CSE 434 Socket Project — Group 77
 
 Distributed hash table over UDP sockets. Storm event records are spread across
-a  ring of peers, coordinated by a central manager.
+a ring of peers, coordinated by a central manager.
 
 ## Team
 
@@ -14,7 +14,8 @@ a  ring of peers, coordinated by a central manager.
 Group 77 is assigned **39500–39999**. All sockets must bind inside this range.
 =======
 Group 77 is assigned **38500–38999**.
->>>>>>> 7dcbb872e55126a7365d71e5c68dc72c5686ad14
+
+> > > > > > > 7dcbb872e55126a7365d71e5c68dc72c5686ad14
 
 | manager | 39500
 | peer 1 | 39501 | 39502 |
@@ -60,7 +61,7 @@ Implemented: `register`, `setup-dht`, `dht-complete`, plus peer-to-peer
 `set-id` and `store`.
 
 Everything else (`query-dht`, `leave-dht`, `join-dht`, `teardown-dht`,
-`deregister`) is due 10/18/2026. 
+`deregister`) is due 10/18/2026.
 
 ## How setup-dht works
 
