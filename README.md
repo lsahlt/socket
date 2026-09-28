@@ -6,17 +6,16 @@ a logical ring of peers, coordinated by a central manager.
 ## Team
 
 - Rogelio Corrales (ASU ID: 1229167630)
-- Cooper _____
+- Cooper Lake (ASU ID: 1231074158)
 
 ## Ports
 
-Group 77 is assigned **38500–38999**. All sockets must bind inside this range.
+Group 77 is assigned **39500–39999**. All sockets must bind inside this range.
 
-
-| manager | 38500 
-| peer 1 | 38501 | 38502 |
-| peer 2 | 38503 | 38504 |
-| peer 3 | 38505 | 38506 |
+| manager | 39500
+| peer 1 | 39501 | 39502 |
+| peer 2 | 39503 | 39504 |
+| peer 3 | 39505 | 39506 |
 
 ## Requirements
 
@@ -39,14 +38,14 @@ setup-dht <peer-name> <n> <YYYY>
 Example with the manager on host A at 10.0.0.1:
 
 ```
-python3 manager.py 38500                  # host A
-python3 peer.py 10.0.0.1 38500            # host A
-  register alice 10.0.0.1 38501 38502
-python3 peer.py 10.0.0.1 38500            # host B
-  register bob 10.0.0.2 38503 38504
-python3 peer.py 10.0.0.1 38500            # host B
-  register carol 10.0.0.2 38505 38506
-  
+python3 manager.py 39500                  # host A
+python3 peer.py 10.0.0.1 39500            # host A
+  register alice 10.0.0.1 39501 39502
+python3 peer.py 10.0.0.1 39500            # host B
+  register bob 10.0.0.2 39503 39504
+python3 peer.py 10.0.0.1 39500            # host B
+  register carol 10.0.0.2 39505 39506
+
 # then at alice:
 setup-dht alice 3 1950
 ```
