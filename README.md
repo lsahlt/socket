@@ -12,10 +12,6 @@ a ring of peers, coordinated by a central manager.
 
 <<<<<<< HEAD
 Group 77 is assigned **39500–39999**. All sockets must bind inside this range.
-=======
-Group 77 is assigned **38500–38999**.
-
-> > > > > > > 7dcbb872e55126a7365d71e5c68dc72c5686ad14
 
 | manager | 39500
 | peer 1 | 39501 | 39502 |
