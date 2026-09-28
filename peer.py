@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-DHT peer — CSE 434 Socket Project, Group 77.
+CSE 434 Socket Project, Group 77
 
-Reads commands from stdin, talks to the manager over its m-port and to other
-peers over its p-port. Both are UDP.
+Reads commands from stdin, talks to the manager over its m port and to other
+peers over its p port. Both are UDP.
 
     python3 peer.py <manager-ipv4> <manager-port>
 
@@ -17,7 +17,7 @@ Status:
     register    working
     setup-dht   working through ring construction (set-id)
     dataset     loaded, l and hash table size computed
-    store       working -- records distributed hop-by-hop around the ring
+    store       working - records distributed hop by hop around the ring
 """
 
 import csv
@@ -33,7 +33,7 @@ from protocol import (BUFSIZE, FAILURE, SUCCESS, Timeout, decode, encode,
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 
-# Local peer states, mirroring what the manager tracks
+#local peer states
 UNREGISTERED = "Unregistered"
 FREE = "Free"
 LEADER = "Leader"
@@ -53,25 +53,23 @@ class Peer:
         self.p_sock = None
         self.state = UNREGISTERED
 
-        # ring membership, set by setup-dht / set-id
-        self.id = None          # this peer's ring identifier
-        self.n = None           # ring size
+        #ring membership, set by setup dht / set-id
+        self.id = None          #peer's ring identifier
+        self.n = None           #ring size
         self.ring = []          # [(name, ip, p_port)] indexed by identifier
         self.right = None       # (name, ip, p_port) of the right neighbour
 
         # local hash table: pos -> list of records that hashed to that slot.
-        # Chaining, because pos = event_id mod s is not injective -- with 223
-        # records in 449 slots collisions are likely, and overwriting would
-        # silently lose data. The spec's query wording ("examines position pos
-        # to see if it holds the record with the given event id") assumes a
-        # slot may hold something other than the record you want, so a chain
-        # is also what find-event will need for the full project.
-        self.table = {}
-        self.record_count = 0   # records stored here, counting chained ones
-        self.forwarded = 0      # store messages passed along the ring
-        self.hash_size = None   # s, the first prime > 2*l
+        # Chaining, because pos = event_id mod s is not injective, with 223
+        # records in 449 slots collisions might happen, and overwriting would
+        # silently lose data.
 
-    # -------------------------------------------------------------- utilities
+        self.table = {}
+        self.record_count = 0   #records stored here, counting chained ones
+        self.forwarded = 0      #store messages passed along the ring
+        self.hash_size = None   #s, the first prime > 2*l
+
+    #utilities
 
     @property
     def who(self):
@@ -106,7 +104,7 @@ class Peer:
         trace_info(self.who, "ring id={} of n={}, right neighbour is {}".format(
             my_id, n, self.label_of(self.right)))
 
-    # -------------------------------------------------------- stdin commands
+    #stdin commands
 
     def cmd_register(self, args):
         if self.state != UNREGISTERED:
@@ -125,8 +123,8 @@ class Peer:
             if not 39500 <= port <= 39999:
                 print("warning: port {} is outside group 77's range 39500-39999".format(port))
 
-        # Bind both sockets before contacting the manager, so that the ports we
-        # advertise are ports we actually hold.
+        #Bind both sockets before contacting the manager, so that the ports we
+        # show are ports we actually hold.
         m_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         p_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         try:
@@ -186,18 +184,18 @@ class Peer:
         trace_info(self.who, "leader of a ring of {}: {}".format(
             ring_size, [t[0] for t in tuples]))
 
-        # Step 1 of 1.2.1: assign identifiers and neighbours.
+        #step 1 of 1.2.1: assign identifiers and neighbours
         self.adopt_ring(0, ring_size, tuples)
         if not self.assign_identifiers():
             trace_info(self.who, "ring construction failed, not sending dht-complete")
             return
 
-        # Step 2 of 1.2.1: populate the local hash tables.
+        #step 2 of 1.2.1: populate the local hash tables
         if not self.build_local_dhts(year):
             trace_info(self.who, "DHT population failed, not sending dht-complete")
             return
 
-        # Step 3 of 1.2.1: report and tell the manager we are done.
+        #step 3 of 1.2.1: report and tell the manager we are done
         self.print_ring_counts()
         try:
             reply = request(self.m_sock, self.mgr, ["dht-complete", self.name],
@@ -208,7 +206,7 @@ class Peer:
         if reply[0] == SUCCESS:
             trace_info(self.who, "DHT setup complete")
 
-    # ------------------------------------------------- leader: ring assembly
+    #ring assembly
 
     def assign_identifiers(self):
         """
@@ -231,7 +229,7 @@ class Peer:
         trace_info(self.who, "all {} identifiers assigned".format(self.n))
         return True
 
-    # ----------------------------------------------- leader: populate the DHT
+    #populate dht
 
     def load_records(self, year):
         """
@@ -256,7 +254,7 @@ class Peer:
                 return None
             for row in reader:
                 if not row or not any(field.strip() for field in row):
-                    continue  # trailing blank line
+                    continue  #trailing blank line
                 try:
                     int(row[0])
                 except (ValueError, IndexError):
@@ -273,27 +271,27 @@ class Peer:
         Step 2 of section 1.2.1: populate the DHT with data.
 
         The leader reads the dataset, sizes the hash table, then places each
-        record. Records belonging to the leader go straight into its own
-        table; the rest are handed to the right neighbour with a store message
-        and travel hop-by-hop around the ring to their owner. The leader never
-        sends a record directly to its target node -- the spec requires ring
+        record. Records belonging to the leader go straight into its own table.
+        The rest are handed to the right neighbour with a store message
+        and hop around the ring to their owner. The leader never
+        sends a record directly to its target node,  spec requires ring
         topology to be used for all management traffic.
         """
         records = self.load_records(year)
         if records is None:
             return False
 
-        length = len(records)                           # l
-        self.hash_size = first_prime_after(2 * length)  # s
+        length = len(records)                           #l
+        self.hash_size = first_prime_after(2 * length)  #s
 
         trace_info(self.who, "dataset details-{}.csv: l={} records".format(year, length))
         trace_info(self.who, "hash table size s = first prime > 2*{} = {}".format(
             length, self.hash_size))
 
-        # Dry run of the two hash functions before anything goes over the
-        # wire. The leader computes id for every record, so it knows the
-        # correct per-node totals without having to ask the other nodes; the
-        # actual counts are checked against these at the end.
+        # Dry run
+        #The leader computes id for every record, so it knows the
+        #correct per node totals without having to ask the other nodes. 
+        # actual counts are checked against these at the end
         self.expected_counts = {i: 0 for i in range(self.n)}
         for row in records:
             _pos, node_id = hash_record(row[0], self.hash_size, self.n)
@@ -301,15 +299,9 @@ class Peer:
         trace_info(self.who, "expected distribution: " + ", ".join(
             "id={}:{}".format(i, self.expected_counts[i]) for i in range(self.n)))
 
-        # Distribute. One record is in flight at a time: the leader waits for
-        # the end-to-end acknowledgement before sending the next. That is
-        # stop-and-wait flow control, and it is deliberate. UDP has no flow
-        # control of its own, so firing hundreds of datagrams back-to-back
-        # overruns the receiver's socket buffer and records vanish with no
-        # error anywhere. Waiting for each ack also means only one datagram
-        # can be outstanding on a peer's p-port, so a reply can never be
-        # mistaken for an unrelated message. At a few hundred records on a LAN
-        # this costs well under a second.
+        #One record is in flight at a time, the leader waits for
+        # the end to end acknowledgement before sending the next.
+ 
         right_addr = (self.right[1], self.right[2])
         self.actual_counts = {i: 0 for i in range(self.n)}
         sent = 0
@@ -327,8 +319,8 @@ class Peer:
 
             message = ["store", node_id, pos, fmt_record(row)]
             try:
-                # The first few are traced in full so the message format is
-                # visible in the demo; the rest are summarised.
+                #The first few are traced in full so the message format is
+                # visible in the demo. The rest are summarised.
                 loud = sent < 2
                 reply = request(self.p_sock, right_addr, message,
                                 who=self.who, label=self.label_of(self.right),
@@ -353,11 +345,11 @@ class Peer:
 
     def print_ring_counts(self):
         """
-        Step 3: the leader reports how many records each node holds.
+        Step 3: the leader reports how many records each node holds
 
         The counts are the leader's own tally, since it computed the owning id
-        for every record as it distributed them. They are cross-checked
-        against the dry run: a shortfall means a store was lost on the wire.
+        for every record as it distributed them. They are cross checked
+        against the dry run. A shortfall means a store was lost on the wire.
         """
         trace_info(self.who, "--- records stored per node ---------------------")
         total = 0
@@ -378,7 +370,7 @@ class Peer:
             trace_info(self.who, "    WARNING: records were lost in transit")
         trace_info(self.who, "-------------------------------------------------")
 
-    # ------------------------------------------------- peer-to-peer handlers
+    #peer handlers
 
     def handle_set_id(self, parts, src):
         my_id = int(parts[1])
@@ -390,12 +382,12 @@ class Peer:
 
     def handle_store(self, parts, src):
         """
-        Receive a record travelling around the ring.
+        Receive a record travelling around the ring
 
-        If we are the target, store it and acknowledge. Otherwise pass the
+        If we are the target, store it and acknowledge, if not pass the
         message unchanged to our right neighbour and wait for its answer
-        before acknowledging, so the leader's acknowledgement is end-to-end:
-        by the time it returns, the record really is in the target's table.
+        before acknowledging. :eader's acknowledgement is end to end.
+        by the time it returns, the record  is in the targets table.
         """
         if self.id is None:
             return [FAILURE, "store", "peer is not part of a DHT"]
@@ -413,7 +405,7 @@ class Peer:
                     record[0], pos, self.record_count))
             return [SUCCESS, "store", target]
 
-        # Not ours: keep it moving around the ring.
+        #not ours so continue around ring
         right_addr = (self.right[1], self.right[2])
         self.forwarded += 1
         if self.forwarded <= 2 or self.forwarded % 25 == 0:
@@ -434,7 +426,7 @@ class Peer:
             return self.handle_store(parts, src)
         return [FAILURE, command, "unknown peer command"]
 
-    # ------------------------------------------------------------- main loop
+    #mainloop
 
     def handle_stdin(self, line):
         parts = line.split()
@@ -460,9 +452,8 @@ class Peer:
     def run(self):
         trace_info("peer", "manager at {}:{}. Type 'register ...' to begin.".format(*self.mgr))
         while True:
-            # One thread watching stdin and the peer socket together. recvfrom
-            # is blocking by default, so select tells us which source is ready
-            # and we only read one that will not block.
+            #one thread watching stdin and the peer socket together
+            # and we only read one that will not block
             watch = [sys.stdin]
             if self.p_sock is not None:
                 watch.append(self.p_sock)
@@ -471,7 +462,7 @@ class Peer:
             for source in ready:
                 if source is sys.stdin:
                     line = sys.stdin.readline()
-                    if not line:  # EOF
+                    if not line:  #EOF
                         return
                     if not self.handle_stdin(line.strip()):
                         return
