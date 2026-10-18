@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Shared wire format and helpers for the CSE 434 DHT project (Group 77).
 
-Messages are UTF-8 strings in a single UDP datagram, fields joined by '|'.
-See MESSAGES.md for the full format. Both manager.py and peer.py import
+
+messages are UTF-8 strings in a single UDP datagram, fields joined by '|'
+See MESSAGES.md for ] full format. Both manager.py and peer.py import
 this module so the two programs cannot drift apart.
 """
 
@@ -57,7 +57,7 @@ def parse_record(text):
     return text.split(REC_DELIM)
 
 
-#racing
+# tracing
 
 TRACE_MAXLEN = 110  #keep lines short enough to read in the demo 
 
@@ -77,14 +77,17 @@ def trace(who, arrow, other, parts):
 
 
 def trace_sent(who, other, parts):
+    """Print one outgoing message in the common trace format."""
     trace(who, "SENT -->", other, parts)
 
 
 def trace_recv(who, other, parts):
+    """Print one incoming message in the common trace format."""
     trace(who, "RECV <--", other, parts)
 
 
 def trace_info(who, text):
+    """Print a local informational message that is not a datagram."""
     print("[{:<8}] {} {}".format(who, "   ..   ", text), flush=True)
 
 
@@ -146,6 +149,7 @@ def first_prime_after(x):
     the number of storm event records in the dataset.
     """
     def is_prime(k):
+        """Return True when k is a prime number."""
         if k < 2:
             return False
         if k % 2 == 0:
