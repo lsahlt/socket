@@ -4,6 +4,97 @@ A complete distributed hash table over UDP sockets. A central manager tracks
 membership; peers form a logical ring for construction and churn, and use a
 randomized hot-potato protocol for queries.
 
+#
+for cooper
+run one manager and multiple peer programs. The manager tracks registrations, DHT membership, and whether the DHT is being built or modified. The peers actually store and query the storm records.
+Start the manager:
+
+```bash
+python3 manager.py <manager-port>
+```
+Start each peer:
+
+```bash
+python3 peer.py <manager-ip> <manager-port>
+```
+Then register each peer using its own IP and two unique ports:
+
+```text
+register <name> <peer-ip> <manager-port-for-peer> <peer-port>
+```
+Example:
+
+```text
+register alice 127.0.0.1 39501 39502
+```
+To build the DHT:
+
+```text
+setup-dht alice 3 1950
+```
+For the final demo, it must be:
+
+```text
+setup-dht alice 5 1996
+```
+
+The manager randomly selects the other DHT members. Use this on each peer to check its role:
+
+```text
+state
+```
+Only a Free peer can query. Querying takes two commands:
+
+```text
+query-dht <free-peer-name>
+find-event <event-id>
+```
+Example:
+
+```text
+query-dht frank
+find-event 5536849
+```
+
+`query-dht` asks the manager for a random starting node. `find-event` then travels between random unvisited DHT peers until it reaches the node responsible for that event ID.
+
+To leave the DHT, run this from a DHT member:
+
+```text
+leave-dht <name>
+```
+
+The ring is deleted, renumbered, and rebuilt without that peer. The leaving peer becomes Free and can query afterward.
+
+To join, run this from a Free peer:
+
+```text
+join-dht <name>
+```
+
+The DHT is rebuilt with that peer included. In our implementation, the joining peer becomes ID 0 and the new leader.
+
+Only the current leader can delete the DHT:
+
+```text
+teardown-dht <leader-name>
+```
+
+After teardown, every peer becomes Free. Gracefully terminate each peer with:
+
+```text
+deregister <name>
+```
+
+Important notes:
+
+- Use ports 39500–39999.
+- Every IP/port pair must be unique.
+- Use real host IP addresses when running on different ASU machines; don’t use `127.0.0.1` across machines.
+- The selected `details-YYYY.csv` must be inside the `data/` directory on every machine that could become leader.
+- `MESSAGES.md` explains the network-message formats but is not required to run the program.
+- `state` is useful for determining the leader, DHT members, and Free peers.
+
 ## Team
 
 - Rogelio Corrales (ASU ID: 1229167630)
